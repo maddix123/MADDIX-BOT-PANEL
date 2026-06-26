@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin - Maddix Portal</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .admin-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .package-card { background: #1a1f2e; padding: 16px; border-radius: 12px; margin-bottom: 12px; }
+    .price-input { width: 100px; padding: 6px; }
+    .duration-select { padding: 6px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <nav class="navbar">
+      <h2>Admin Panel</h2>
+      <div class="nav-user">
+        <button class="btn btn-secondary btn-sm" onclick="window.location.href='/dashboard'">Dashboard</button>
+        <button class="btn btn-secondary btn-sm" onclick="logout()">Logout</button>
+      </div>
+    </nav>
+
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="icon">👥</div>
+        <h3>Users</h3>
+        <div class="value" id="admin-users">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="icon">🤖</div>
+        <h3>Total Bots</h3>
+        <div class="value" id="admin-bots">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="icon">✅</div>
+        <h3>Active Bots</h3>
+        <div class="value" id="admin-active">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="icon">💰</div>
+        <h3>Total Coins</h3>
+        <div class="value" id="admin-coins">0</div>
+      </div>
+    </div>
+
+    <!-- Existing sections -->
+    <div class="section">
+      <h2>Users</h2>
+      <div id="users-list" class="bot-list">
+        <div class="empty-state">Loading users...</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>All Bots</h2>
+      <div id="bots-list" class="bot-list">
+        <div class="empty-state">Loading bots...</div>
+      </div>
+    </div>
+
+    <!-- NEW: Bot Pricing & Packages Section -->
+    <div class="section">
+      <h2>Bot Pricing & Packages</h2>
+      
+      <div class="admin-grid">
+        <!-- Bot Prices -->
+        <div>
+          <h3 style="margin-bottom: 12px;">Set Bot Prices</h3>
+          <div id="bot-pricing-list"></div>
+          <button class="btn btn-primary" onclick="saveBotPrices()" style="margin-top: 12px;">Save Prices</button>
+        </div>
+
+        <!-- Create Package -->
+        <div>
+          <h3 style="margin-bottom: 12px;">Create New Package</h3>
+          <div class="package-card">
+            <div class="form-group">
+              <label>Package Name</label>
+              <input type="text" id="pkg-name" placeholder="Premium 30 Days">
+            </div>
+            <div class="form-group">
+              <label>Bot Type</label>
+              <select id="pkg-bot-type">
+                <option value="bot-one">Maddix Bot One</option>
+                <option value="bot-two">Maddix Bot Two</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Price (Coins)</label>
+              <input type="number" id="pkg-price" value="50" class="price-input">
+            </div>
+            <div class="form-group">
+              <label>Duration (Days)</label>
+              <select id="pkg-duration" class="duration-select">
+                <option value="7">7 days</option>
+                <option value="14">14 days</option>
+                <option value="30" selected>30 days</option>
+                <option value="60">60 days</option>
+                <option value="90">90 days</option>
+              </select>
+            </div>
+            <button class="btn btn-primary" onclick="createPackage()">Create Package</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Existing Packages -->
+      <div style="margin-top: 24px;">
+        <h3>Existing Packages</h3>
+        <div id="packages-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/admin.js"></script>
+</body>
+</html>
