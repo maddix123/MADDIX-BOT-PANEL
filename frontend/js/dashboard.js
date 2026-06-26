@@ -4,9 +4,11 @@ let user = null;
 let socket = null;
 let currentBotType = null;
 let currentBotCost = 0;
+let currentBotDuration = 30;
 let pairingInterval = null;
 let pairingTimer = null;
 let currentPairingInstance = null;
+let allPackages = [];
 
 if (!token) {
   window.location.href = '/';
@@ -34,7 +36,8 @@ async function loadDashboard() {
     document.getElementById('referral-code').textContent = user.referralCode;
     
     renderDeployedBots(user.botInstances);
-    loadAvailableBots();
+    await loadAvailableBots();
+    await loadPackages();
   } catch (err) {
     showToast('error', 'Error', err.message);
   }
@@ -47,26 +50,75 @@ async function loadAvailableBots() {
     });
     const data = await res.json();
     const container = document.getElementById('available-bots');
+    
+    if (!data.bots || data.bots.length === 0) {
+      container.innerHTML = '<div class="empty-state">No bots are currently available for renting</div>';
+      return;
+    }
+
     container.innerHTML = data.bots.map(bot => `
-      <div class="bot-card">
-        <h3>${bot.icon} ${bot.displayName}</h3>
-        <p style="color: var(--text-muted); font-size: 14px;">${bot.description}</p>
-        <div class="features">
-          ${bot.features.slice(0, 4).map(f => `
-            <div class="feature-item">
-              <span>✓</span>
-              <span>${f}</span>
-            </div>
-          `).join('')}
+      <div class="bot-card" style="display: flex; flex-direction: column; justify-content: space-between;">
+        <div>
+          <h3>${bot.icon} ${bot.displayName}</h3>
+          <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 12px;">${bot.description}</p>
+          <div style="font-size: 13px; color: var(--primary); margin-bottom: 12px; font-weight: 600;">
+            📅 Default Plan: ${bot.durationDays || 30} Days
+          </div>
+          <div class="features">
+            ${bot.features.slice(0, 4).map(f => `
+              <div class="feature-item">
+                <span>✓</span>
+                <span>${f}</span>
+              </div>
+            `).join('')}
+          </div>
         </div>
-        <div class="cost">
+        <div class="cost" style="border-top: 1px solid var(--border); padding-top: 12px; margin-top: 12px;">
           <span><strong>${bot.cost}</strong> coins</span>
-          <button class="btn btn-primary btn-sm" onclick="openDeployModal('${bot.botId}', ${bot.cost})">Deploy</button>
+          <button class="btn btn-primary btn-sm" onclick="openDeployModal('${bot.botId}', ${bot.cost}, ${bot.durationDays || 30})">Deploy</button>
         </div>
       </div>
     `).join('');
   } catch (err) {
     console.error('Load bots error:', err);
+  }
+}
+
+async function loadPackages() {
+  try {
+    const res = await fetch(`${API_URL}/bot/packages`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    const data = await res.json();
+    allPackages = data.packages || [];
+    
+    const container = document.getElementById('packages-cards-container');
+    const section = document.getElementById('packages-section');
+    
+    if (allPackages.length === 0) {
+      section.style.display = 'none';
+      return;
+    }
+    
+    section.style.display = 'block';
+    container.innerHTML = allPackages.map(pkg => `
+      <div class="bot-card" style="display: flex; flex-direction: column; justify-content: space-between; border-color: var(--warning);">
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+            <h3 style="font-size: 16px; color: var(--warning); margin-bottom: 0;">🌟 ${pkg.name}</h3>
+            <span class="status-badge status-pending" style="font-size: 10px; padding: 2px 8px;">Special</span>
+          </div>
+          <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 12px;">
+            Rent plan for <strong>${pkg.botType === 'bot-one' ? 'Maddix Bot One' : 'Maddix Bot Two'}</strong>.
+          </p>
+          <div style="font-size: 14px; margin-bottom: 4px;">⏱️ Duration: <strong>${pkg.durationDays} Days</strong></div>
+          <div style="font-size: 14px; margin-bottom: 4px;">💰 Total cost: <strong>${pkg.price} Coins</strong></div>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="openDeployWithPackage('${pkg.botType}', '${pkg._id}', ${pkg.price})" style="margin-top: 16px; background: var(--warning); color: #000;">Deploy Package</button>
+      </div>
+    `).join('');
+  } catch (err) {
+    console.error('Load packages error:', err);
   }
 }
 
@@ -83,17 +135,21 @@ function renderDeployedBots(bots) {
     return;
   }
   
-  container.innerHTML = `<div class="bot-list">${bots.map(bot => `
-    <div class="bot-item">
-      <div>
-        <strong>${bot.name}</strong>
-        <div style="color: var(--text-muted); font-size: 13px; margin-top: 4px;">
-          ID: ${bot.instanceId} | ${bot.botType === 'bot-one' ? '⚔️ KnightBot' : '🚀 MEGA-MD'} | Phone: ${bot.phoneNumber || 'Not connected'}
+  container.innerHTML = `<div class="bot-list">${bots.map(bot => {
+    const expiresDate = bot.expiresAt ? new Date(bot.expiresAt).toLocaleDateString() : 'N/A';
+    return `
+      <div class="bot-item" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+        <div>
+          <strong>${bot.name}</strong>
+          <div style="color: var(--text-muted); font-size: 13px; margin-top: 4px;">
+            ID: ${bot.instanceId} | ${bot.botType === 'bot-one' ? '🤖 Maddix Bot One' : '⚔️ Maddix Bot Two'} | Phone: ${bot.phoneNumber || 'Not connected'}
+          </div>
+          <div style="color: var(--text-muted); font-size: 12px; margin-top: 2px;">
+            Plan duration: <strong>${bot.durationDays} Days</strong> | Expires: <span style="color: var(--warning);">${expiresDate}</span>
+          </div>
         </div>
-      </div>
-      <div style="display: flex; align-items: center; gap: 12px;">
-        <span class="status-badge status-${bot.status}">${bot.status}</span>
-        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+          <span class="status-badge status-${bot.status}">${bot.status}</span>
           ${bot.status === 'pending' || bot.status === 'connecting' || bot.status === 'waiting_for_pairing' ? `
             <button class="btn btn-secondary btn-sm" onclick="showPairingModal('${bot.instanceId}')">Pairing Code</button>
           ` : ''}
@@ -103,19 +159,70 @@ function renderDeployedBots(bots) {
           <button class="btn btn-danger btn-sm" onclick="deleteBot('${bot.instanceId}')" style="background:#e74c3c;color:white;border:none;">Delete</button>
         </div>
       </div>
-    </div>
-  `).join('')}</div>`;
+    `;
+  }).join('')}</div>`;
 }
 
-function openDeployModal(botType, cost) {
+function openDeployModal(botType, cost, durationDays) {
   if (user.coins < cost) {
     showToast('error', 'Insufficient Coins', `You need ${cost} coins`);
     return;
   }
   currentBotType = botType;
   currentBotCost = cost;
+  currentBotDuration = durationDays;
+  
   document.getElementById('deploy-form').reset();
+  
+  // Populate packages dropdown in the modal
+  const select = document.getElementById('deploy-package');
+  select.innerHTML = `<option value="default" selected>Standard Plan (${durationDays} Days) - ${cost} coins</option>`;
+  
+  const botPkgs = allPackages.filter(p => p.botType === botType);
+  botPkgs.forEach(pkg => {
+    select.innerHTML += `<option value="${pkg._id}">${pkg.name} (${pkg.durationDays} Days) - ${pkg.price} coins</option>`;
+  });
+  
   document.getElementById('deploy-modal').classList.add('active');
+}
+
+function openDeployWithPackage(botType, packageId, price) {
+  if (user.coins < price) {
+    showToast('error', 'Insufficient Coins', `You need ${price} coins for this package`);
+    return;
+  }
+  
+  currentBotType = botType;
+  currentBotCost = price;
+  
+  document.getElementById('deploy-form').reset();
+  
+  // Find bot duration from our default list or keep fallback
+  const select = document.getElementById('deploy-package');
+  select.innerHTML = '';
+  
+  const botPkgs = allPackages.filter(p => p.botType === botType);
+  botPkgs.forEach(pkg => {
+    const isSelected = pkg._id === packageId ? 'selected' : '';
+    select.innerHTML += `<option value="${pkg._id}" ${isSelected}>${pkg.name} (${pkg.durationDays} Days) - ${pkg.price} coins</option>`;
+  });
+  
+  // Add standard plan option too as fallback
+  select.innerHTML += `<option value="default">Standard Plan (30 Days)</option>`;
+  
+  document.getElementById('deploy-modal').classList.add('active');
+}
+
+function updateSelectedPackageCost() {
+  const val = document.getElementById('deploy-package').value;
+  if (val === 'default') {
+    currentBotCost = 5; // fallback
+  } else {
+    const pkg = allPackages.find(p => p._id === val);
+    if (pkg) {
+      currentBotCost = pkg.price;
+    }
+  }
 }
 
 function closeModal(id) {
@@ -130,7 +237,13 @@ async function submitDeploy(e) {
   e.preventDefault();
   const name = document.getElementById('deploy-name').value.trim();
   const phone = document.getElementById('deploy-phone').value.trim().replace(/[\s\-]/g, '').replace(/^\+/, '');
+  const packageId = document.getElementById('deploy-package').value;
   
+  if (user.coins < currentBotCost) {
+    showToast('error', 'Insufficient Coins', `You need ${currentBotCost} coins to deploy`);
+    return;
+  }
+
   try {
     const res = await fetch(`${API_URL}/bot/deploy`, {
       method: 'POST',
@@ -138,13 +251,18 @@ async function submitDeploy(e) {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`
       },
-      body: JSON.stringify({ botType: currentBotType, instanceName: name, phoneNumber: phone })
+      body: JSON.stringify({ 
+        botType: currentBotType, 
+        instanceName: name, 
+        phoneNumber: phone,
+        packageId: packageId 
+      })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Deploy failed');
     
     closeModal('deploy-modal');
-    showToast('success', 'Deploying', 'Your bot is starting...');
+    showToast('success', 'Deploying', 'Your bot deployment has started!');
     loadDashboard();
     
     setTimeout(() => {
@@ -301,7 +419,7 @@ async function viewLogs(instanceId) {
     const modal = document.createElement('div');
     modal.className = 'modal-overlay active';
     modal.innerHTML = `
-      <div class="modal" style="max-width: 600px;">
+      <div class="modal" style="max-width: 600px; width: 90%;">
         <h2>Bot Logs</h2>
         <div class="logs-container">
           ${data.logs.map(log => `

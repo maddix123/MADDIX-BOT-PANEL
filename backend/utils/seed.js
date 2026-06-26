@@ -3,6 +3,9 @@ import Bot from '../models/Bot.js';
 import bcrypt from 'bcryptjs';
 
 export async function initBots() {
+  // Automatically clean up any old/obsolete bots (like Kongo or Jawad) from the DB
+  await Bot.deleteMany({ botId: { $nin: ['bot-one', 'bot-two'] } });
+
   const defaultBots = [
     {
       botId: 'bot-one',
@@ -28,7 +31,15 @@ export async function initBots() {
 
   for (const botData of defaultBots) {
     const existing = await Bot.findOne({ botId: botData.botId });
-    if (!existing) await Bot.create(botData);
+    if (!existing) {
+      await Bot.create(botData);
+    } else {
+      // Keep displayName, description and features updated
+      existing.displayName = botData.displayName;
+      existing.description = botData.description;
+      existing.features = botData.features;
+      await existing.save();
+    }
   }
 }
 

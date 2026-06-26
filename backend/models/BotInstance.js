@@ -11,7 +11,9 @@ const botInstanceSchema = new mongoose.Schema({
   cost: { type: Number, default: 5 },
   processId: { type: Number },
   logs: [{ level: String, message: String, timestamp: { type: Date, default: Date.now } }],
-  maxRestarts: { type: Number, default: 5 }
+  maxRestarts: { type: Number, default: 5 },
+  durationDays: { type: Number, default: 30 },
+  expiresAt: { type: Date, default: () => new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) }
 }, { timestamps: true });
 
 botInstanceSchema.methods.addLog = async function(level, message) {

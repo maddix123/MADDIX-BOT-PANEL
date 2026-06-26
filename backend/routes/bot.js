@@ -5,6 +5,7 @@ import { authenticate } from '../middleware/auth.js';
 import Bot from '../models/Bot.js';
 import User from '../models/User.js';
 import BotInstance from '../models/BotInstance.js';
+import Package from '../models/Package.js';
 import { deployBot, stopBot, restartBot } from '../services/botDeploy.js';
 
 const router = express.Router();
@@ -18,6 +19,15 @@ router.get('/available', authenticate, async (req, res) => {
   }
 });
 
+router.get('/packages', authenticate, async (req, res) => {
+  try {
+    const packages = await Package.find().sort({ price: 1 });
+    res.json({ packages });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to get packages' });
+  }
+});
+
 router.post('/deploy', authenticate, [
   body('botType').isIn(['bot-one', 'bot-two']),
   body('instanceName').trim().isLength({ min: 2, max: 50 }),
@@ -27,14 +37,29 @@ router.post('/deploy', authenticate, [
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ error: 'Validation failed', details: errors.array() });
 
-    const { botType, instanceName, phoneNumber } = req.body;
+    const { botType, instanceName, phoneNumber, packageId } = req.body;
     const user = await User.findById(req.user._id);
 
     const bot = await Bot.findOne({ botId: botType });
     if (!bot) return res.status(400).json({ error: 'Invalid bot type' });
 
-    if (!user.canDeploy(bot.cost)) {
-      return res.status(400).json({ error: 'Insufficient coins', required: bot.cost, current: user.coins });
+    let finalCost = bot.cost;
+    let finalDuration = bot.durationDays || 30;
+    let packageName = `Standard Plan (${finalDuration} Days)`;
+
+    if (packageId && packageId !== 'default') {
+      const pkg = await Package.findById(packageId);
+      if (pkg && pkg.botType === botType) {
+        finalCost = pkg.price;
+        finalDuration = pkg.durationDays;
+        packageName = `${pkg.name} (${finalDuration} Days)`;
+      } else {
+        return res.status(400).json({ error: 'Invalid package selection' });
+      }
+    }
+
+    if (!user.canDeploy(finalCost)) {
+      return res.status(400).json({ error: 'Insufficient coins', required: finalCost, current: user.coins });
     }
 
     const userBotCount = await BotInstance.countDocuments({ user: user._id });
@@ -48,14 +73,16 @@ router.post('/deploy', authenticate, [
       name: instanceName,
       botType,
       user: user._id,
-      cost: bot.cost,
+      cost: finalCost,
       status: 'pending',
-      phoneNumber: phoneNumber.replace(/[\s\-]/g, '').replace(/^\+/, '')
+      phoneNumber: phoneNumber.replace(/[\s\-]/g, '').replace(/^\+/, ''),
+      durationDays: finalDuration,
+      expiresAt: new Date(Date.now() + finalDuration * 24 * 60 * 60 * 1000)
     });
 
     await botInstance.save();
     await User.findByIdAndUpdate(user._id, { $push: { botInstances: botInstance._id } });
-    await user.deductCoins(bot.cost, `Deployed ${bot.displayName}`, botInstance._id);
+    await user.deductCoins(finalCost, `Deployed ${bot.displayName} via ${packageName}`, botInstance._id);
 
     const io = req.app.get('io');
     const botInstances = req.app.get('botInstances');
@@ -71,7 +98,9 @@ router.post('/deploy', authenticate, [
         name: botInstance.name,
         botType: botInstance.botType,
         status: botInstance.status,
-        cost: botInstance.cost
+        cost: botInstance.cost,
+        durationDays: botInstance.durationDays,
+        expiresAt: botInstance.expiresAt
       }
     });
   } catch (err) {

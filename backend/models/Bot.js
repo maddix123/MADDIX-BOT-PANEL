@@ -9,7 +9,8 @@ const botSchema = new mongoose.Schema({
   cost: { type: Number, default: 5 },
   icon: { type: String, default: '🤖' },
   features: [{ type: String }],
-  isActive: { type: Boolean, default: true }
+  isActive: { type: Boolean, default: true },
+  durationDays: { type: Number, default: 30 }
 }, { timestamps: true });
 
 export default mongoose.model('Bot', botSchema);
