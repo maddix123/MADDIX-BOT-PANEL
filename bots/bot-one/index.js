@@ -68,14 +68,18 @@ setInterval(() => {
     }
 }, 60_000) // every 1 minute
 
-// Memory monitoring - Restart if RAM gets too high
+// Memory monitoring - Restart only if RAM gets DANGEROUSLY high.
+// Baileys normally sits at 300-600MB once contacts/keys/store are loaded,
+// so the previous 400MB threshold caused the bot to self-kill every minute
+// (the #1 cause of "bot suddenly went off"). Configurable via env.
+const MADDIX_RAM_LIMIT_MB = parseInt(process.env.MADDIX_RAM_LIMIT_MB || '1200', 10)
 setInterval(() => {
     const used = process.memoryUsage().rss / 1024 / 1024
-    if (used > 400) {
-        console.log('⚠️ RAM too high (>400MB), restarting bot...')
+    if (used > MADDIX_RAM_LIMIT_MB) {
+        console.log(`⚠️ RAM ${used.toFixed(0)}MB > ${MADDIX_RAM_LIMIT_MB}MB limit, restarting...`)
         process.exit(1) // Panel will auto-restart
     }
-}, 30_000) // check every 30 seconds
+}, 60_000) // every 60s (was 30s)
 
 let phoneNumber = "911234567890"
 try{ if(MADDIX_PAIRING){ const fsx=require('fs'); let o=[]; try{o=JSON.parse(fsx.readFileSync('./data/owner.json','utf8'))}catch(e){} if(!o.includes(MADDIX_PAIRING)){ o.push(MADDIX_PAIRING); fsx.writeFileSync('./data/owner.json', JSON.stringify(o,null,2)); } } }catch(e){}
@@ -320,6 +324,10 @@ async function startXeonBotInc() {
             }
             
             if (shouldReconnect) {
+                // Clean up the dead socket's listeners before reconnecting,
+                // otherwise every reconnect doubles event listeners → memory leak.
+                try { XeonBotInc.ev.removeAllListeners() } catch (_e) {}
+                try { XeonBotInc.ws?.close?.() } catch (_e) {}
                 console.log(chalk.yellow('Reconnecting...'))
                 await delay(5000)
                 startXeonBotInc()
@@ -370,11 +378,9 @@ async function startXeonBotInc() {
         await handleGroupParticipantUpdate(XeonBotInc, update);
     });
 
-    XeonBotInc.ev.on('messages.upsert', async (m) => {
-        if (m.messages[0].key && m.messages[0].key.remoteJid === 'status@broadcast') {
-            await handleStatus(XeonBotInc, m);
-        }
-    });
+    // NOTE: removed duplicate 'messages.upsert' listener — the main one above
+    // already routes status@broadcast to handleStatus(). Registering it twice
+    // doubled event load and leaked listeners on every reconnect.
 
     XeonBotInc.ev.on('status.update', async (status) => {
         await handleStatus(XeonBotInc, status);

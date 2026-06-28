@@ -38,13 +38,16 @@ setInterval(() => {
         console.log('🧹 Garbage collection completed');
     }
 }, 60000);
+// Memory monitoring — see explanation in bot-one. 400MB was way too low for
+// Baileys (healthy baseline 300-600MB) and caused constant self-restarts.
+const MADDIX_RAM_LIMIT_MB = parseInt(process.env.MADDIX_RAM_LIMIT_MB || '1200', 10);
 setInterval(() => {
     const used = process.memoryUsage().rss / 1024 / 1024;
-    if (used > 400) {
-        printLog('warning', 'RAM too high (>400MB), restarting bot...');
+    if (used > MADDIX_RAM_LIMIT_MB) {
+        printLog('warning', `RAM ${used.toFixed(0)}MB > ${MADDIX_RAM_LIMIT_MB}MB limit, restarting...`);
         process.exit(1);
     }
-}, 30000);
+}, 60000);
 const phoneNumber = config.pairingNumber || config.ownerNumber || "923051391005";
 // Auto-create data directory and default files on startup
 const DATA_DEFAULTS = {
@@ -496,6 +499,9 @@ async function startQasimDev() {
                     return;
                 }
                 if (shouldReconnect) {
+                    // Tear down old socket listeners to prevent leaks across reconnects.
+                    try { QasimDev.ev.removeAllListeners(); } catch (_e) {}
+                    try { QasimDev.ws?.close?.(); } catch (_e) {}
                     printLog('connection', 'Reconnecting in 5 seconds...');
                     await delay(5000);
                     startQasimDev();

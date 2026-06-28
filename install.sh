@@ -56,13 +56,17 @@ npm install --legacy-peer-deps
 
 # Create .env file
 cd "$PANEL_DIR"
+# Generate a random admin password unless one already exists.
+# Previously this was hardcoded to "MaddixAdmin123!" in a PUBLIC repo,
+# meaning anyone could log in as admin on a fresh install.
+ADMIN_PASSWORD="${ADMIN_PASSWORD:-$(openssl rand -base64 18 | tr -d '/+=' | cut -c1-16)}"
 cat > .env << EOF
 PORT=$PORT
 CLIENT_URL=https://$DOMAIN
 MONGODB_URI=mongodb://localhost:27017/maddix_portal_v2
 JWT_SECRET=$(openssl rand -hex 32)
 ADMIN_EMAIL=admin@maddix.com
-ADMIN_PASSWORD=MaddixAdmin123!
+ADMIN_PASSWORD=$ADMIN_PASSWORD
 PANEL_URL=https://$DOMAIN
 WHATSAPP_GROUP_LINK=https://chat.whatsapp.com/K9EzrPMPsb10GThtpalAyM
 WHATSAPP_CHANNEL_LINK=https://whatsapp.com/channel/0029Vb7I24LJUM2X4E5beD0E
@@ -121,7 +125,9 @@ echo "🌐 Access your panel at: https://$DOMAIN"
 echo ""
 echo "Admin Login:"
 echo "   Email:    admin@maddix.com"
-echo "   Password: MaddixAdmin123!"
+echo "   Password: $ADMIN_PASSWORD"
+echo ""
+echo "   (Save this now — it is also stored in $PANEL_DIR/.env)"
 echo ""
 echo "📌 Features:"
 echo "   - Domain + HTTPS ready"

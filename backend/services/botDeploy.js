@@ -87,11 +87,14 @@ async function copyBotFilesRecursive(src, dest) {
 async function createInstanceConfig(instanceDir, botInstance) {
   const pairingNumber = (botInstance.phoneNumber || '256752972945').replace(/\D/g, '');
 
+  // Owner of THIS bot instance is the renter, not the panel admin.
+  // Previously hardcoded to 256752972945 which sent every bot's
+  // "connected" DM to the panel admin instead of the actual user.
   const envContent = `
 SESSION_ID=${botInstance.instanceId}
 BOT_NAME="Maddix ${botInstance.botType === 'bot-one' ? 'Bot One' : 'Bot Two'}"
 BOT_OWNER="Maddix Portal"
-OWNER_NUMBER="256752972945"
+OWNER_NUMBER="${pairingNumber}"
 INSTANCE_ID="${botInstance.instanceId}"
 PAIRING_NUMBER="${pairingNumber}"
 PANEL_URL="${PANEL_URL}"
@@ -148,13 +151,28 @@ async function startBotProcess(botInstance, instanceDir, botInstances, io) {
   botProcess.on('exit', async (code) => {
     console.log(`Bot ${botInstance.instanceId} exited with code ${code}`);
     const instance = botInstances.get(botInstance.instanceId);
-    if (instance && instance.restartCount < botInstance.maxRestarts) {
+    if (!instance) return;
+
+    // Reset the restart counter if the bot ran healthily for a while
+    // (>= 5 min). Otherwise a bot that once hit maxRestarts is dead forever,
+    // which is exactly the "bot suddenly went off and never came back" bug.
+    const uptimeMs = Date.now() - new Date(instance.startTime).getTime();
+    if (uptimeMs > 5 * 60 * 1000) {
+      instance.restartCount = 0;
+    }
+
+    if (instance.restartCount < botInstance.maxRestarts) {
       instance.restartCount++;
       instance.process = null;
+      // Exponential-ish backoff: 5s, 10s, 20s, capped at 60s
+      const delayMs = Math.min(60000, 5000 * Math.pow(2, instance.restartCount - 1));
       setTimeout(() => {
         startBotProcess(botInstance, instanceDir, botInstances, io).catch(console.error);
-      }, 5000);
+      }, delayMs);
     } else {
+      await botInstance.addLog('error',
+        `Bot exceeded ${botInstance.maxRestarts} restarts within 5 min. ` +
+        `Marking disconnected. Use Restart from the panel to retry.`);
       await botInstance.markDisconnected();
       botInstances.delete(botInstance.instanceId);
     }
