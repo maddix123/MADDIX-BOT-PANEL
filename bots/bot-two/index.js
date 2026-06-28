@@ -38,6 +38,7 @@ setInterval(() => {
         console.log('🧹 Garbage collection completed');
     }
 }, 60000);
+
 // Memory monitoring — see explanation in bot-one. 400MB was way too low for
 // Baileys (healthy baseline 300-600MB) and caused constant self-restarts.
 const MADDIX_RAM_LIMIT_MB = parseInt(process.env.MADDIX_RAM_LIMIT_MB || '1200', 10);
@@ -48,6 +49,7 @@ setInterval(() => {
         process.exit(1);
     }
 }, 60000);
+
 const phoneNumber = config.pairingNumber || config.ownerNumber || "923051391005";
 // Auto-create data directory and default files on startup
 const DATA_DEFAULTS = {
@@ -488,14 +490,15 @@ async function startQasimDev() {
             }
             if (connection === 'close') {
                 const statusCode = lastDisconnect?.error?.output?.statusCode;
-                const shouldReconnect = statusCode !== DisconnectReason.loggedOut && statusCode !== 401;
-                if (statusCode === DisconnectReason.loggedOut || statusCode === 401) {
+                const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+                
+                // Critical Fix: Only delete session on an EXPLICIT logged out reason, never on temporary drops
+                if (statusCode === DisconnectReason.loggedOut) {
                     try {
                         rmSync('./session', { recursive: true, force: true });
                     }
                     catch (_e) { /* ignore */ }
-                    await delay(3000);
-                    startQasimDev();
+                    printLog('warning', 'Session logged out. Session folder deleted. Please re-authenticate.');
                     return;
                 }
                 if (shouldReconnect) {
@@ -546,23 +549,10 @@ async function main() {
     });
 }
 main();
-// Session cleanup interval
-const sessionDir = path.join(process.cwd(), 'session');
-setInterval(() => {
-    if (!fs.existsSync(sessionDir))
-        return;
-    fs.readdir(sessionDir, (err, files) => {
-        if (err)
-            return;
-        for (const file of files) {
-            if (file === 'creds.json')
-                continue;
-            if (file.startsWith('app-state-sync-key-'))
-                continue;
-            fs.unlink(path.join(sessionDir, file), () => { });
-        }
-    });
-}, 3 * 60 * 1000);
+
+// Critical Fix: Completely removed the destructive background setInterval session files cleaner
+// that deleted pre-keys/sender-keys every 3 minutes causing regular crash and unauthorized errors!
+
 // Temp folder setup
 const customTemp = path.join(process.cwd(), 'temp');
 if (!fs.existsSync(customTemp))

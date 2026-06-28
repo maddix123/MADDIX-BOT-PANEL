@@ -308,19 +308,19 @@ async function startXeonBotInc() {
         }
         
         if (connection === 'close') {
-            const shouldReconnect = (lastDisconnect?.error)?.output?.statusCode !== DisconnectReason.loggedOut
             const statusCode = lastDisconnect?.error?.output?.statusCode
+            const shouldReconnect = statusCode !== DisconnectReason.loggedOut
             
             console.log(chalk.red(`Connection closed due to ${lastDisconnect?.error}, reconnecting ${shouldReconnect}`))
             
-            if (statusCode === DisconnectReason.loggedOut || statusCode === 401) {
+            // Critical Fix: Only delete session on an EXPLICIT 401 logged out reason, never on temporary drops
+            if (statusCode === DisconnectReason.loggedOut) {
                 try {
                     rmSync('./session', { recursive: true, force: true })
-                    console.log(chalk.yellow('Session folder deleted. Please re-authenticate.'))
+                    console.log(chalk.yellow('Session logged out. Session folder deleted. Please re-authenticate.'))
                 } catch (error) {
                     console.error('Error deleting session:', error)
                 }
-                console.log(chalk.red('Session logged out. Please re-authenticate.'))
             }
             
             if (shouldReconnect) {
